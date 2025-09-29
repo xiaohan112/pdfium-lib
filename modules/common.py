@@ -136,7 +136,7 @@ def get_build_args(
 
     if target_os == "android":
         args.append("clang_use_chrome_plugins=false")
-        args.append("default_min_sdk_version=21")
+        args.append("default_min_sdk_version=23")
         args.append("pdf_is_standalone=true")
         args.append("pdf_bundle_freetype=true")
     elif target_os == "ios":
@@ -158,7 +158,7 @@ def get_build_args(
         args.append("clang_use_chrome_plugins=false")
         args.append("pdf_is_standalone=true")
     elif target_os.startswith("mac"):
-        args.append('mac_deployment_target="10.13.0"')
+        args.append('mac_deployment_target="11.0.0"')
         args.append("clang_use_chrome_plugins=false")
         args.append("pdf_is_standalone=true")
         args.append("use_custom_libcxx=false")

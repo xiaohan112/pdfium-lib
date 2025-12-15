@@ -136,7 +136,7 @@ def get_build_args(
 
     if target_os == "android":
         args.append("clang_use_chrome_plugins=false")
-        args.append("default_min_sdk_version=21")
+        args.append("default_min_sdk_version=23")
         args.append("pdf_is_standalone=true")
         args.append("pdf_bundle_freetype=true")
     elif target_os == "ios":
@@ -145,6 +145,7 @@ def get_build_args(
         args.append("pdf_is_standalone=false")
         args.append("use_custom_libcxx=false")
         args.append('target_environment="{0}"'.format(target_environment))
+        args.append('ios_deployment_target="12.0"')
 
         if enable_v8 and target_cpu == "arm64":
             args.append('arm_control_flow_integrity="none"')
@@ -157,7 +158,7 @@ def get_build_args(
         args.append("clang_use_chrome_plugins=false")
         args.append("pdf_is_standalone=true")
     elif target_os.startswith("mac"):
-        args.append('mac_deployment_target="10.13.0"')
+        args.append('mac_deployment_target="11.0.0"')
         args.append("clang_use_chrome_plugins=false")
         args.append("pdf_is_standalone=true")
         args.append("use_custom_libcxx=false")
@@ -167,11 +168,10 @@ def get_build_args(
         # static lib
         if not shared:
             args.append("pdf_is_complete_lib=true")
-    elif target_os.startswith("wasm"):
+    elif target_os.startswith("emscripten"):
         args.append("pdf_is_complete_lib=true")
         args.append("is_clang=false")
         args.append("use_custom_libcxx=false")
-        args.append("use_sysroot=false")
 
     if libc == "musl":
         args.append("is_musl=true")

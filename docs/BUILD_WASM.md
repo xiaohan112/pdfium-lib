@@ -1,6 +1,6 @@
 # Build for WASM
 
-1. Execute all **general** steps
+1. First, execute all steps in the [How to compile](https://github.com/paulocoutinhox/pdfium-lib/tree/master?tab=readme-ov-file#how-to-compile) section
 
 2. Get Emscripten SDK:
 ```python3 make.py build-emsdk```
@@ -14,7 +14,7 @@
 ```python3 make.py patch-wasm```
 
 6. PDFium Linux dependencies
-```./build/wasm32/pdfium/build/install-build-deps.sh```
+```./build/emscripten/pdfium/build/install-build-deps.sh```
 
 7. Compile:
 ```python3 make.py build-wasm```

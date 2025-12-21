@@ -140,6 +140,9 @@ def get_build_args(
         args.append("pdf_is_standalone=true")
         args.append("pdf_bundle_freetype=true")
     elif target_os == "ios":
+        args.append("use_xcode_clang=true")
+        args.append("use_custom_libcxx_for_host=false")
+        args.append('cxx_std="c++17"')
         args.append("ios_enable_code_signing=false")
         args.append("use_blink=true")
         args.append("pdf_is_standalone=false")

@@ -120,10 +120,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: artifact-wasm
-      - name: Load per-config package (release)
-        uses: actions/download-artifact@v4
-        with:
-          name: artifact-wasm-release
       - name: Get release
         id: get_release
         uses: bruceadams/get-release@v1.2.2

@@ -15,10 +15,13 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - { name: "macOS", os: "macos-latest", target: "ios" }
+          - { name: "macOS", os: "macos-15", target: "ios" }
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Xcode
+        run: sudo xcode-select -s "/Applications/Xcode_26.0.app"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,7 +39,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@master
         with:
-          version: "1.10.0"
+          version: "1.12.1"
 
       - name: Verify
         run: |

@@ -482,6 +482,164 @@ def run_task_test():
 
 
 # -----------------------------------------------------------------------------
+def run_task_test_wasmtime():
+    from pathlib import Path
+
+    from wasmtime import Engine, FuncType, Linker, Module, Store, WasiConfig
+
+    l.colored("Testing with wasmtime...", l.YELLOW)
+
+    current_dir = f.current_dir()
+
+    for config in c.configurations_wasm:
+        for target in c.targets_wasm:
+            l.colored(
+                'Testing arch "{0}" and configuration "{1}"...'.format(
+                    target["target_cpu"], config
+                ),
+                l.YELLOW,
+            )
+
+            # paths
+            relative_dir = os.path.join(
+                "build",
+                target["target_os"],
+                target["target_cpu"],
+                config,
+            )
+
+            root_dir = os.path.join(current_dir, relative_dir)
+            node_dir = os.path.join(root_dir, "node")
+            wasm_file = os.path.join(node_dir, "pdfium.std.wasm")
+
+            # check if wasm file exists
+            if not f.file_exists(wasm_file):
+                l.e(f"WASM file not found: {wasm_file}")
+                continue
+
+            l.bullet(f"WASM file: {wasm_file}", l.YELLOW)
+
+            # create engine and load the pdfium.wasm module
+            engine = Engine()
+            module = Module.from_file(engine, wasm_file)
+
+            # create WASI context and store
+            wasi_config = WasiConfig()
+            wasi_config.inherit_stdin()
+            wasi_config.inherit_stdout()
+            wasi_config.inherit_stderr()
+
+            store = Store(engine)
+            store.set_wasi(wasi_config)
+
+            # create a linker and add WASI support
+            linker = Linker(engine)
+            linker.define_wasi()
+
+            # define stub functions for unknown imports
+            for imp in module.imports:
+                module_name = imp.module
+                field_name = imp.name
+
+                # check if this is a function import
+                if isinstance(imp.type, FuncType):
+                    func_type = imp.type
+
+                    # create a stub function that returns default values
+                    def make_stub(ft):
+                        def stub_func(*_args):
+                            # return default values (0 or None) based on results
+                            if ft.results:
+                                if len(ft.results) == 1:
+                                    return 0
+                                return tuple(0 for _ in ft.results)
+                            return None
+
+                        return stub_func
+
+                    try:
+                        linker.define_func(
+                            module_name, field_name, func_type, make_stub(func_type)
+                        )
+                    except Exception:
+                        # already defined (e.g., by WASI)
+                        pass
+
+            # instantiate the module
+            instance = linker.instantiate(store, module)
+            exports = instance.exports(store)
+
+            # get and call FPDF_InitLibrary function
+            try:
+                init_library = exports["FPDF_InitLibrary"]
+                init_library(store)
+                l.bullet("FPDF_InitLibrary successfully called", l.GREEN)
+            except KeyError:
+                l.e("Function 'FPDF_InitLibrary' not found")
+                continue
+
+            # test with a sample PDF file
+            sample_pdf = os.path.join(
+                current_dir, "sample-wasm", "assets", "web-assembly.pdf"
+            )
+
+            if not f.file_exists(sample_pdf):
+                l.bullet("Sample PDF not found, skipping document test", l.PURPLE)
+                continue
+
+            l.bullet(f"Testing with PDF: {sample_pdf}", l.YELLOW)
+
+            # read PDF data
+            pdf_path = Path(sample_pdf)
+            pdf_data = pdf_path.read_bytes()
+
+            # allocate memory for the PDF data
+            malloc = exports["malloc"]
+            memory = exports["memory"]
+
+            # allocate buffer in WASM memory
+            buf_ptr = malloc(store, len(pdf_data))
+            mem_data = memory.data_ptr(store)
+
+            # copy PDF data to WASM memory
+            for i, byte in enumerate(pdf_data):
+                mem_data[buf_ptr + i] = byte
+
+            # load the PDF document from memory
+            fpdf_load_mem_document = exports["FPDF_LoadMemDocument"]
+            doc = fpdf_load_mem_document(store, buf_ptr, len(pdf_data), 0)
+
+            if doc == 0:
+                get_last_error = exports["FPDF_GetLastError"]
+                error = get_last_error(store)
+                l.e(f"Failed to load PDF. Error code: {error}")
+
+                # free the allocated memory
+                free = exports["free"]
+                free(store, buf_ptr)
+                continue
+
+            # get page count
+            fpdf_get_page_count = exports["FPDF_GetPageCount"]
+            page_count = fpdf_get_page_count(store, doc)
+
+            l.bullet(f"PDF: {pdf_path.name}", l.GREEN)
+            l.bullet(f"Number of pages: {page_count}", l.GREEN)
+
+            # close the document
+            fpdf_close_document = exports["FPDF_CloseDocument"]
+            fpdf_close_document(store, doc)
+
+            # free the allocated memory
+            free = exports["free"]
+            free(store, buf_ptr)
+
+            l.bullet("Test completed successfully", l.GREEN)
+
+    l.ok()
+
+
+# -----------------------------------------------------------------------------
 def run_task_generate():
     l.colored("Generating...", l.YELLOW)
 
@@ -591,7 +749,8 @@ def run_task_generate():
                 "{0}".format("-g" if config == "debug" else "-O2"),
                 "-s",
                 f"EXPORTED_FUNCTIONS={complete_functions_list}",
-                "-s", "ALLOW_TABLE_GROWTH",
+                "-s",
+                "ALLOW_TABLE_GROWTH",
                 "-s",
                 'EXPORTED_RUNTIME_METHODS=\'["ccall", "cwrap", "wasmExports", "HEAP8", "HEAP16", "HEAP32", "HEAPU8", "HEAPU16", "HEAPU32", "HEAPF32", "HEAPF64", "addFunction", "removeFunction", "setValue"]\'',
                 "custom.cpp",
@@ -624,11 +783,26 @@ def run_task_generate():
             l.colored("Compiling ES6 module with emscripten...", l.YELLOW)
             es6_command = [
                 *base_command,
-                "-s" "EXPORT_ES6=1",
+                "-s",
+                "EXPORT_ES6=1",
                 "-o",
                 os.path.join(gen_out_dir, "pdfium.esm.js"),
             ]
             r.run(" ".join(es6_command), cwd=gen_utils_dir, shell=True)
+
+            # Generate STANDALONE module, only .js will be generated (no .wasm)
+            l.colored("Compiling STANDALONE module with emscripten...", l.YELLOW)
+            std_command = [
+                *base_command,
+                "-s" "STANDALONE_WASM=1",
+                "-sSTANDALONE_WASM=1",
+                "-sWASM_ASYNC_COMPILATION=0",
+                "-sWARN_ON_UNDEFINED_SYMBOLS=1",
+                "-sERROR_ON_UNDEFINED_SYMBOLS=0",
+                "-o",
+                os.path.join(gen_out_dir, "pdfium.std.js"),
+            ]
+            r.run(" ".join(std_command), cwd=gen_utils_dir, shell=True)
 
             # copy files
             l.colored("Copying compiled files...", l.YELLOW)
@@ -769,7 +943,9 @@ def run_task_archive():
             )
 
             # Create per config "npm install"-compatible tarball
-            per_config_tar = tarfile.open(os.path.join(current_dir, f"wasm-{config}.tgz"), "w:gz")
+            per_config_tar = tarfile.open(
+                os.path.join(current_dir, f"wasm-{config}.tgz"), "w:gz"
+            )
             per_config_tar.add(
                 name=lib_dir,
                 # Use "package" as the root directory to be compatible with "npm install"
